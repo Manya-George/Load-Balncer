@@ -1,0 +1,198 @@
+
+
+This project implements a customizable load balancer using **consistent hashing** to distribute asynchronous client requests evenly across multiple server replicas. The load balancer:
+
+* Maintains a fixed number of server replicas (containers)
+* Monitors server health via heartbeats and respawns failed servers automatically
+* Allows dynamic scaling (adding/removing servers)
+* Routes client requests based on consistent hashing to ensure minimal disruption on scaling or failure
+
+This system is containerized using **Docker** and deployed within a Docker network, simulating a real-world distributed environment.
+
+---
+
+## Technologies & Environment
+
+* **OS:** Ubuntu 20.04 LTS or above
+* **Docker:** Version 20.10.23 or above
+* **Docker Compose:** v2.15.1
+* **Programming Language:** Python 3.8+
+* **Libraries:** Flask (for HTTP servers), Requests (for testing)
+* **Version Control:** Git & GitHub
+
+---
+
+## Installation & Setup
+
+1. **Clone the repository:**
+
+   ```bash
+   git clone https://github.com/Manya-George/Load-Balncer.git
+   cd Load-Balancer
+   ```
+
+2. **Build and deploy the system using Docker Compose:**
+
+   ```bash
+   make deploy
+   ```
+
+3. **Stop and clean containers:**
+
+   ```bash
+   make clean
+   ```
+
+---
+
+## Project Structure
+
+```
+custom-load-balancer/
+│
+├── server/
+│   ├── app.py             # Server code (Task 1)
+│   ├── Dockerfile         # Containerize server
+│
+├── load_balancer/
+│   ├── app.py             # Load balancer code (Tasks 2 & 3)
+│   ├── consistent_hash.py # Consistent hashing implementation
+│   ├── Dockerfile         # Containerize load balancer
+│
+├── tests/
+│   ├── test_load_balancer.py  # Automated tests (Task 4)
+│
+├── docker-compose.yml     # Compose to deploy whole stack
+├── Makefile               # Scripts to build, deploy, clean
+├── README.md              # This documentation
+└── requirements.txt       # Python dependencies
+```
+
+---
+
+## Implementation Details
+
+### Task 1: Server
+
+* A minimal Flask-based HTTP server listening on port `5000`.
+* Endpoints:
+
+  * `/home` (GET): Returns `"Hello from Server: [ID]"`. Server ID is injected via Docker env variable.
+  * `/heartbeat` (GET): Returns status 200 with empty response to indicate server health.
+* Dockerized with environment variables and network settings.
+
+---
+
+### Task 2: Consistent Hashing
+
+* Implemented a consistent hash ring with 512 slots.
+* Each physical server is represented by 9 virtual nodes (`K = log2(512) = 9`).
+* Hash functions:
+
+  * `H(i) = i + 2*i + 17` for request hashing
+  * `Φ(i, j) = i + j + 2*j + 25` for virtual server mapping
+* Collision handled via linear probing.
+* Virtual nodes improve load distribution and fault tolerance.
+
+---
+
+### Task 3: Load Balancer
+
+* Maintains `N=3` server containers by default.
+* HTTP API Endpoints:
+
+  * `/rep` (GET): Lists current server replicas.
+  * `/add` (POST): Adds new server replicas.
+  * `/rm` (DELETE): Removes server replicas.
+  * `/<path>` (GET): Routes request to appropriate server using consistent hashing.
+* Monitors server health using `/heartbeat`. Spawns new containers if failures detected.
+* Dockerized with privileged container setup for managing other containers.
+
+---
+
+### Task 4: Analysis & Testing
+
+* Automated Python test scripts in `/tests` folder simulate 10,000 async requests.
+* Collects and charts distribution of requests among servers.
+* Tests dynamic scaling (`/add` and `/rm` endpoints).
+* Measures load balancer’s responsiveness to server failures.
+* Reports results in console and generates charts using matplotlib.
+
+---
+
+## Usage
+
+1. **Access Load Balancer API:**
+
+   By default, the load balancer listens on `http://localhost:5000`.
+
+2. **Check replicas:**
+
+   ```bash
+   curl http://localhost:5000/rep
+   ```
+
+3. **Add servers:**
+
+   ```bash
+   curl -X POST http://localhost:5000/add -H "Content-Type: application/json" \
+        -d '{"n":2,"hostnames":["S4","S5"]}'
+   ```
+
+4. **Remove servers:**
+
+   ```bash
+   curl -X DELETE http://localhost:5000/rm -H "Content-Type: application/json" \
+        -d '{"n":1,"hostnames":["S4"]}'
+   ```
+
+5. **Send client requests:**
+
+   ```bash
+   curl http://localhost:5000/home
+   ```
+
+---
+
+## Running Tests
+
+Run automated test suite to validate system and analyze load balancing:
+
+```bash
+python3 tests/test_load_balancer.py
+```
+
+The script runs multiple async requests, outputs distribution stats, and generates charts saved under `/tests/results/`.
+
+---
+
+## Performance & Analysis
+
+### Experiment A-1: Load Distribution with N=3
+
+* Sent 10,000 requests asynchronously.
+* Requests distributed nearly evenly among servers.
+* Bar chart shows slight variance due to hashing randomness.
+
+### Experiment A-2: Scaling from N=2 to N=6
+
+* At each increment, sent 10,000 requests.
+* Load balanced with high uniformity across servers.
+* Line chart confirms scalability and smooth load distribution.
+
+### Experiment A-3: Failure Recovery
+
+* Simulated server failure by stopping container.
+* Load balancer detected failure via heartbeat.
+* Spawned new server container promptly to maintain `N` replicas.
+
+### Experiment A-4: Hash Function Modification
+
+* Changed hash functions `H(i)` and `Φ(i,j)`.
+* Observed slight degradation in load uniformity.
+* Consistent hashing properties verified.
+
+
+
+---
+
