@@ -1,19 +1,23 @@
 
 
-This project implements a customizable load balancer using **consistent hashing** to distribute asynchronous client requests evenly across multiple server replicas. The load balancer:
+This project implements a customizable load balancer using  that  distributes asyncronous client requests evenly among multiple server containers using **consistent hashing** .
+The  servers have  multiple replicas.The containerization is done with docker and deployed within a docker network.
+
+
+Functions of a load balancer:
 
 * Maintains a fixed number of server replicas (containers)
 * Monitors server health via heartbeats and respawns failed servers automatically
 * Allows dynamic scaling (adding/removing servers)
 * Routes client requests based on consistent hashing to ensure minimal disruption on scaling or failure
 
-This system is containerized using **Docker** and deployed within a Docker network, simulating a real-world distributed environment.
+
 
 ---
 
 ## Technologies & Environment
 
-* **OS:** Ubuntu 20.04 LTS or above
+* **Operating System:** Ubuntu 20.04 LTS or above
 * **Docker:** Version 20.10.23 or above
 * **Docker Compose:** v2.15.1
 * **Programming Language:** Python 3.8+
@@ -23,32 +27,65 @@ This system is containerized using **Docker** and deployed within a Docker netwo
 ---
 
 ## Installation & Setup
+Installation
+1. Install Docker Engine
+bash
 
-1. **Clone the repository:**
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl gnupg lsb-release
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+
+Verify Docker:
+bash
+
+sudo docker --version
+
+
+2. Install Docker Compose
+bash
+
+sudo curl -SL https://github.com/docker/compose/releases/download/v2.15.1/docker-compose-linux-x86_64 -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+sudo ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+
+Verify Docker Compose:
+bash
+
+docker-compose --version
+
+3. Install Git (if not installed)
+bash
+
+sudo apt-get install -y git
+
+
+4. **Clone the repository:**
 
    ```bash
    git clone https://github.com/Manya-George/Load-Balncer.git
-   cd Load-Balancer
+   cd Load-Balncer
    ```
 
-2. **Build and deploy the system using Docker Compose:**
+5. **Build and run containers using Makefile (recommended)
+bash
+Copy code
+make build       # Builds all Docker images (server + load balancer)
+make start       # Starts the full system (load balancer + 3 server replicas)
+make stop        # Stops and removes all containers
 
-   ```bash
-   make deploy
-   ```
-
-3. **Stop and clean containers:**
-
-   ```bash
-   make clean
-   ```
 
 ---
 
 ## Project Structure
 
 ```
-custom-load-balancer/
+load-balncer/
 │
 ├── server/
 │   ├── app.py             # Server code (Task 1)
@@ -64,9 +101,9 @@ custom-load-balancer/
 │
 ├── docker-compose.yml     # Compose to deploy whole stack
 ├── Makefile               # Scripts to build, deploy, clean
-├── README.md              # This documentation
+├── README.md              # A documentation to explain everything 
 └── requirements.txt       # Python dependencies
-```
+
 
 ---
 
