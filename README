@@ -1,19 +1,23 @@
+                                              
+
+This project implements a customizable load balancer using  that  distributes asyncronous client requests evenly among multiple server containers using **consistent hashing** .
+The  servers have  multiple replicas.The containerization is done with docker and deployed within a docker network.
 
 
-This project implements a customizable load balancer using **consistent hashing** to distribute asynchronous client requests evenly across multiple server replicas. The load balancer:
+Functions of a load balancer:
 
 * Maintains a fixed number of server replicas (containers)
 * Monitors server health via heartbeats and respawns failed servers automatically
 * Allows dynamic scaling (adding/removing servers)
 * Routes client requests based on consistent hashing to ensure minimal disruption on scaling or failure
 
-This system is containerized using **Docker** and deployed within a Docker network, simulating a real-world distributed environment.
+
 
 ---
 
 ## Technologies & Environment
 
-* **OS:** Ubuntu 20.04 LTS or above
+* **Operating System:** Ubuntu 20.04 LTS or above
 * **Docker:** Version 20.10.23 or above
 * **Docker Compose:** v2.15.1
 * **Programming Language:** Python 3.8+
@@ -23,50 +27,63 @@ This system is containerized using **Docker** and deployed within a Docker netwo
 ---
 
 ## Installation & Setup
+Installation
+1. **Install Docker Engine**
+ ```bash
 
-1. **Clone the repository:**
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl gnupg lsb-release
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+ ```
+Verify Docker:
+ ```bash
+
+sudo docker --version
+ ```
+
+2. **Install Docker Compose**
+ ```bash
+
+sudo curl -SL https://github.com/docker/compose/releases/download/v2.15.1/docker-compose-linux-x86_64 -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+sudo ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+ ```
+Verify Docker Compose:
+ ```bash
+
+docker-compose --version
+ ```
+
+3. **Install Git (if not installed)**
+ ```bash
+
+sudo apt-get install -y git
+ ```
+
+4. **Clone the repository:**
 
    ```bash
    git clone https://github.com/Manya-George/Load-Balncer.git
-   cd Load-Balancer
+   cd Load-Balncer
    ```
 
-2. **Build and deploy the system using Docker Compose:**
+5. **Build and run containers using Makefile**
+ ```bash
 
-   ```bash
-   make deploy
-   ```
+make build       # Builds all Docker images (server + load balancer)
+make start       # Starts the full system (load balancer + 3 server replicas)
+make stop        # Stops and removes all containers
+ 
+ ```
 
-3. **Stop and clean containers:**
 
-   ```bash
-   make clean
-   ```
 
----
-
-## Project Structure
-
-```
-custom-load-balancer/
-│
-├── server/
-│   ├── app.py             # Server code (Task 1)
-│   ├── Dockerfile         # Containerize server
-│
-├── load_balancer/
-│   ├── app.py             # Load balancer code (Tasks 2 & 3)
-│   ├── consistent_hash.py # Consistent hashing implementation
-│   ├── Dockerfile         # Containerize load balancer
-│
-├── tests/
-│   ├── test_load_balancer.py  # Automated tests (Task 4)
-│
-├── docker-compose.yml     # Compose to deploy whole stack
-├── Makefile               # Scripts to build, deploy, clean
-├── README.md              # This documentation
-└── requirements.txt       # Python dependencies
-```
 
 ---
 
@@ -85,14 +102,20 @@ custom-load-balancer/
 
 ### Task 2: Consistent Hashing
 
-* Implemented a consistent hash ring with 512 slots.
-* Each physical server is represented by 9 virtual nodes (`K = log2(512) = 9`).
+
+
+
+### Requirements:
+
+* Number of physical server containers: **N = 3**
+* Number of slots in the hash map: **512**
+* Number of virtual servers per physical server: **K = 9** (since $\log_2 512 = 9$)
 * Hash functions:
 
-  * `H(i) = i + 2*i + 17` for request hashing
-  * `Φ(i, j) = i + j + 2*j + 25` for virtual server mapping
-* Collision handled via linear probing.
-* Virtual nodes improve load distribution and fault tolerance.
+  * Request hash: $H(i) = (i + 2i^2 + 17) \mod 512$
+  * Virtual server hash: $\Phi(i, j) = (i^2 + j + 2j^2 + 25) \mod 512$
+* Collision resolution by **linear probing**
+
 
 ---
 
@@ -195,17 +218,3 @@ The script runs multiple async requests, outputs distribution stats, and generat
 
 
 ---
-
-## Design Choices & Assumptions
-
-* **Flask** used for simplicity in server and load balancer APIs.
-* Python chosen for faster development and ease of networking.
-* Docker privileged container to allow spawning/removing containers from load balancer.
-* Linear probing preferred for collision due to simplicity.
-* Server failure detection via periodic heartbeat checks every 5 seconds.
-* Virtual servers configured as per standard consistent hashing best practices.
-* Docker network internal DNS used for container hostname resolution.
-* Requests IDs simulated as 6-digit random integers.
-
----
-
