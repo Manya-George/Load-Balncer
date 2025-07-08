@@ -1,337 +1,211 @@
 
+
+This project implements a customizable load balancer using **consistent hashing** to distribute asynchronous client requests evenly across multiple server replicas. The load balancer:
+
+* Maintains a fixed number of server replicas (containers)
+* Monitors server health via heartbeats and respawns failed servers automatically
+* Allows dynamic scaling (adding/removing servers)
+* Routes client requests based on consistent hashing to ensure minimal disruption on scaling or failure
+
+This system is containerized using **Docker** and deployed within a Docker network, simulating a real-world distributed environment.
+
 ---
 
-# Kubernetes Hackathon
+## Technologies & Environment
 
-This project demonstrates a containerized microservice architecture deployed on a local Kubernetes cluster (Minikube). The entire system runs inside a VirtualBox VM using Ubuntu. This guide will walk you through setting up the environment, deploying the application, and exploring different solutions.
+* **OS:** Ubuntu 20.04 LTS or above
+* **Docker:** Version 20.10.23 or above
+* **Docker Compose:** v2.15.1
+* **Programming Language:** Python 3.8+
+* **Libraries:** Flask (for HTTP servers), Requests (for testing)
+* **Version Control:** Git & GitHub
 
-## Requirements
+---
 
-### Host Machine:
+## Installation & Setup
 
-* **VirtualBox**: Ensure it's installed on your host machine.
-*  **UBUNTU-24.04.2**: This is the operating system of the virtual machine.
-* **Internet Connection**: Required for installing dependencies inside the Ubuntu VM.
+1. **Clone the repository:**
 
-### Inside Ubuntu VM (20.04 or later):
+   ```bash
+   git clone https://github.com/Manya-George/Load-Balncer.git
+   cd Load-Balancer
+   ```
 
-* Docker
-* Minikube
-* Kubectl
-* Git
+2. **Build and deploy the system using Docker Compose:**
 
+   ```bash
+   make deploy
+   ```
 
-## Setup Instructions
+3. **Stop and clean containers:**
 
-### 1. Update System & Install Dependencies
+   ```bash
+   make clean
+   ```
 
-Run the following commands to update your system:
+---
+
+## Project Structure
+
+```
+custom-load-balancer/
+│
+├── server/
+│   ├── app.py             # Server code (Task 1)
+│   ├── Dockerfile         # Containerize server
+│
+├── load_balancer/
+│   ├── app.py             # Load balancer code (Tasks 2 & 3)
+│   ├── consistent_hash.py # Consistent hashing implementation
+│   ├── Dockerfile         # Containerize load balancer
+│
+├── tests/
+│   ├── test_load_balancer.py  # Automated tests (Task 4)
+│
+├── docker-compose.yml     # Compose to deploy whole stack
+├── Makefile               # Scripts to build, deploy, clean
+├── README.md              # This documentation
+└── requirements.txt       # Python dependencies
+```
+
+---
+
+## Implementation Details
+
+### Task 1: Server
+
+* A minimal Flask-based HTTP server listening on port `5000`.
+* Endpoints:
+
+  * `/home` (GET): Returns `"Hello from Server: [ID]"`. Server ID is injected via Docker env variable.
+  * `/heartbeat` (GET): Returns status 200 with empty response to indicate server health.
+* Dockerized with environment variables and network settings.
+
+---
+
+### Task 2: Consistent Hashing
+
+* Implemented a consistent hash ring with 512 slots.
+* Each physical server is represented by 9 virtual nodes (`K = log2(512) = 9`).
+* Hash functions:
+
+  * `H(i) = i + 2*i + 17` for request hashing
+  * `Φ(i, j) = i + j + 2*j + 25` for virtual server mapping
+* Collision handled via linear probing.
+* Virtual nodes improve load distribution and fault tolerance.
+
+---
+
+### Task 3: Load Balancer
+
+* Maintains `N=3` server containers by default.
+* HTTP API Endpoints:
+
+  * `/rep` (GET): Lists current server replicas.
+  * `/add` (POST): Adds new server replicas.
+  * `/rm` (DELETE): Removes server replicas.
+  * `/<path>` (GET): Routes request to appropriate server using consistent hashing.
+* Monitors server health using `/heartbeat`. Spawns new containers if failures detected.
+* Dockerized with privileged container setup for managing other containers.
+
+---
+
+### Task 4: Analysis & Testing
+
+* Automated Python test scripts in `/tests` folder simulate 10,000 async requests.
+* Collects and charts distribution of requests among servers.
+* Tests dynamic scaling (`/add` and `/rm` endpoints).
+* Measures load balancer’s responsiveness to server failures.
+* Reports results in console and generates charts using matplotlib.
+
+---
+
+## Usage
+
+1. **Access Load Balancer API:**
+
+   By default, the load balancer listens on `http://localhost:5000`.
+
+2. **Check replicas:**
+
+   ```bash
+   curl http://localhost:5000/rep
+   ```
+
+3. **Add servers:**
+
+   ```bash
+   curl -X POST http://localhost:5000/add -H "Content-Type: application/json" \
+        -d '{"n":2,"hostnames":["S4","S5"]}'
+   ```
+
+4. **Remove servers:**
+
+   ```bash
+   curl -X DELETE http://localhost:5000/rm -H "Content-Type: application/json" \
+        -d '{"n":1,"hostnames":["S4"]}'
+   ```
+
+5. **Send client requests:**
+
+   ```bash
+   curl http://localhost:5000/home
+   ```
+
+---
+
+## Running Tests
+
+Run automated test suite to validate system and analyze load balancing:
 
 ```bash
-sudo apt update && sudo apt upgrade -y
+python3 tests/test_load_balancer.py
 ```
 
-### 2. Install Docker
+The script runs multiple async requests, outputs distribution stats, and generates charts saved under `/tests/results/`.
 
-Install Docker and add your user to the Docker group:
+---
 
-```bash
-sudo apt install -y docker.io
-sudo usermod -aG docker $USER
-newgrp docker
-```
+## Performance & Analysis
 
-### 3. Install Minikube
+### Experiment A-1: Load Distribution with N=3
 
-Download and install Minikube:
+* Sent 10,000 requests asynchronously.
+* Requests distributed nearly evenly among servers.
+* Bar chart shows slight variance due to hashing randomness.
 
-```bash
-curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-sudo install minikube-linux-amd64 /usr/local/bin/minikube
-```
+### Experiment A-2: Scaling from N=2 to N=6
 
-### 4. Install Kubectl
+* At each increment, sent 10,000 requests.
+* Load balanced with high uniformity across servers.
+* Line chart confirms scalability and smooth load distribution.
 
-Download and install kubectl:
+### Experiment A-3: Failure Recovery
 
-```bash
-curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
-```
+* Simulated server failure by stopping container.
+* Load balancer detected failure via heartbeat.
+* Spawned new server container promptly to maintain `N` replicas.
 
-### 5. Start Minikube
+### Experiment A-4: Hash Function Modification
 
-Start Minikube with the Docker driver:
+* Changed hash functions `H(i)` and `Φ(i,j)`.
+* Observed slight degradation in load uniformity.
+* Consistent hashing properties verified.
 
-```bash
-minikube start --driver=docker
-```
 
-> **Note**: If using VirtualBox driver, replace `--driver=docker` with `--driver=virtualbox`.
 
-### 6. Clone the Project Repository
+---
 
-Clone the repository and navigate into the project directory:
+## Design Choices & Assumptions
 
-```bash
-git clone https://github.com/yourusername/your-repo.git
-cd your-repo
-```
-To clone our repo
-    - Open a terminal (PowerShell on Windows; any shell on Linux/macOS) 
-    - Run: `git clone https://github.com/kubernetes_hackathon.git`
-  
+* **Flask** used for simplicity in server and load balancer APIs.
+* Python chosen for faster development and ease of networking.
+* Docker privileged container to allow spawning/removing containers from load balancer.
+* Linear probing preferred for collision due to simplicity.
+* Server failure detection via periodic heartbeat checks every 5 seconds.
+* Virtual servers configured as per standard consistent hashing best practices.
+* Docker network internal DNS used for container hostname resolution.
+* Requests IDs simulated as 6-digit random integers.
 
-### 7. Deploy to Kubernetes
-
-Deploy the application using the Kubernetes configuration files:
-
-```bash
-kubectl apply -f k8s/
-```
-
-### 8. Access the Application
-
-To access the application, you can retrieve the service URL as follows:
-
-```bash
-minikube service <service-name> --url
-```
-
-## Solutions Overview
-
-### Solution 1: Basic Deployment
-
-Widgetario, a company that sells gadgets, runs its public web app on Kubernetes. All components are packaged into container images and published on Docker Hub. In this solution, we start with a simple setup using one replica for each component. We were able to ping `127.0.0.1` or browse port `8080` on the cluster.
-
-To deploy after Cloning 
-```bash
-
-kubectl apply -f kubernetes_hackathon/solution-part-1/products-db -f kubernetes_hackathon/solution-part-1/products-api  -f kubernetes_hackathon/solution-part-1/stock-api -f kubernetes_hackathon/solution-part-1/web
-```
-### Solution 2: Secure Configuration
-
-The `widgetario/products-db:21.03` image exposes the database password through environment variables. This solution addresses the security issue by:
-
-* Storing passwords securely in environment variables.
-* Enabling the front-end team to experiment with a new dark mode via a config setting.
-
-Key tasks:
-
-* **Products DB**: Secure the `POSTGRES_PASSWORD` environment variable.
-* **Stock API**: Use a Go app that connects to the PostgreSQL database with a connection string.
-* **Products API**: Update the Spring Boot application’s `application.properties` with the new password.
-* **Web App**: A .NET Core app that uses `/app/secrets/api.json` for overriding settings, including API URLs and theme configurations.
-
-Environment variables:
-
-* `Widgetario__Theme=dark` (for dark mode)
-
-  To deploy after cloning this repo
-
-```
-kubectl apply -f kubernetes_hackathon/solution-part-2/products-db -f kubernetes_hackathon/solution-part-2/products-api  -f kubernetes_hackathon/solution-part-2/stock-api -f kubernetes_hackathon/solution-part-2/web
-```
-
-
-### Solution 3: PostgreSQL Replication & Caching
-
-Enabled local caching for the Stock API (`/cache` directory) to survive Pod restarts. We also switched to a replicated PostgreSQL setup using `widgetario/products-db:postgres-replicated`.
-
-* **PostgreSQL Replication**: Configure the Products API to connect to the primary DB and the Stock API to the secondary.
-* **Deployment Update**: Clean up old persistent volumes and services.
-
-Commands:
-
-```bash
-kubectl delete deploy products-db
-kubectl delete svc products-db
-kubectl delete pvc -l app=products-db
-
-kubectl apply -f kubernetes_hackathon/solution-part-3/products-db \
-              -f kubernetes_hackathon/solution-part-3/products-api \
-              -f kubernetes_hackathon/solution-part-3/stock-api \
-              -f kubernetes_hackathon/solution-part-3/web
-
-kubectl rollout restart deploy/products-api deploy/stock-api
-```
-
-### Solution 4: Ingress Configuration
-
-Configured Ingress resources for clean domain-based routing:
-
-* **Web App**: `http://widgetario.local`
-* **API**: `http://api.widgetario.local`
-
-Commands:
-
-```bash
-./scripts/add-to-hosts.sh widgetario.local 127.0.0.1
-./scripts/add-to-hosts.sh api.widgetario.local 127.0.0.1
-```
-
-This ensures that the web app and APIs are accessible through friendly domain names.
-
-To deploy after cloning this repo
-```
-kubectl apply -f kubernetes_hackathon/solution-part-44/ingress-controller -f kubernetes_hackathon/solution-part-44/products-db -f kubernetes_hackathon/solution-part-44/products-api  -f kubernetes_hackathon/solution-part-44/stock-api -f kubernetes_hackathon/solution-part-44/web
-```
-
-
-
-## Part 5 - Productionizing
-Deployment:
-
-```
-kubectl apply -f kubernetes_hackathon/solution-part-5/ingress-controller -f kubernetes_hackathon/solution-part-5/products-db -f kubernetes_hackathon/solution-part-5/products-api  -f kubernetes_hackathon/solution-part-5/stock-api -f kubernetes_hackathon/solution-part-5/web
-```
-
-Everything works in the same way:
-
-> Browse to http://widgetario.local to see the app
-
-> See the API response at http://api.widgetario.local/products
-
-
-
-The StatefulSet rollout takes a few minutes, and the app may not be responsive until both Pods are up. **And** there are CPU resources in the specs, so if your cluster doesn't have enough capacity you may see Pods stuck in the _Pending_ status, so you'll need to adjust the values.
-
-
-## Part 6 - Observability
-
-
-All the API and web servers publish metrics, so we don't need to change any code. To prove monitoring is usable you'll need to:
-
-- run a monitoring stack with Prometheus and Grafana
-- configure the Pod specs so Prometheus collects metrics - the database doesn't expose any metric but the other components do
-- the app devs have said the Products API using a custom metrics path `/actuator/prometheus`, and the web app might be running with a custom port
-- deploy the changes and check all the components are having metrics stored in Prometheus
-- open Grafana and load the dashboard from `kubernetes_hackathon/files/grafana-dashboard.json`; use the app and confirm all the visualizations show data.
-
-And then you'll also need to set up centralized logging:
-
-- run the EFK stack to collect and store logs in the app namespace
-- the dev team say the web app writes logs to a file, so you'll need to add a sidecar container to print logs from `/logs/app.log` in the app container
-- open Kibana and load the dashboard from `kubernetes_hackathon/files/kibana-dashboard.ndjson`; check the visualizations to see every component is writing logs
-
-
-```
-kubectl apply -f kubernetes_hackathon/solution-part-6/monitoring -f kubernetes_hackathon/solution-part-6/logging -f kubernetes_hackathon/solution-part-6/ingress-controller -f kubernetes_hackathon/solution-part-6/widgetario
-```
-
-
-* Grafana on http://localhost:30003 or http://localhost:3000
-
-* Kibana on http://localhost:30005 or http://localhost:5601
-
-
-
-## Part 7 - CI/CD
-
-The last thing we need is a full CI/CD pipeline to build from source code and deploy to a test environment.
-
-We've settled on Helm for packaging, so the first task is to work up the YAML specs into a Helm chart. The chart should support:
-- multiple release in the same namespace
-- variables for image tags, replica counts, and whether resource limits should be included
-- app configuration per release, including the database password and the web theme
-
-We'll be using standard deployments for the ingress controller, monitoring and logging stacks so you don't need to build Helm charts for those
-
-Then we need to put together the continuous integration pipeline:
-
-- we'll use Jenkins, BuildKit and Gogs to power the pipeline
-- you'll need to create a registry Secret to push to Docker Hub (or your own registry)
-- the source code is all in the `/hackathon/project` folder
-
-So then we're ready to add continuous deployment:
-
-- extend the Jenkinsfile to add the deployment steps
-- use the Helm chart for deploying to a test namespace
-- deploy the chart with the values file 
-- the deployment needs to use the latest images which were pushed in the build.
-
-Now when you trigger the build from Jenkins you should see a new version of the app deployed in your test namespace, running all the latest image versions.
-
-
-```
-# On Windows (run as Admin)
-./scripts/add-to-hosts.ps1 widgetario.uat 127.0.0.1
-./scripts/add-to-hosts.ps1 api.widgetario.uat 127.0.0.1
-
-# OR on Linux/macOS
-./scripts/add-to-hosts.sh widgetario.uat 127.0.0.1
-./scripts/add-to-hosts.sh api.widgetario.uat 127.0.0.1
-```
-
-Try the Products API:
-
-```
-curl -k https://api.widgetario.uat/products
-```
-
-> Browse to http://widgetario.uat; you'll see a new _Buy_ button from the latest image update
-
-_Deploy the build infrastructure:_
-
-```
-kubectl apply -f kubernetes_hackathon/solution-part-7/infrastructure
-```
-
-_When it's all running, push your local code to Gogs:_
-
-```
-git remote add hackathon http://localhost:30031/kiamol/kiamol.git
-
-
-_Create a configmap with the details for the image name - be sure to use a registry and domain you have push access for:_
-
-```
-kubectl -n infra create configmap build-config --from-literal=REGISTRY=docker.io  --from-literal=REPOSITORY=$REGISTRY_USER 
-```
-
-_Restart Jenkins to load the latest config:_
-
-```
-kubectl rollout restart deploy/jenkins -n infra
-```
-
-> Browse to Jenkins http://localhost:30007, sign in with the `kiamol` username and password
-
-Open the Widgetario job in Jenkins, enable and build it. Confirm that your images build and are pushed with the correct tags.
-
-_Add the Helm deploy stage to Jenkins:_
-
-You can edit the Jenkisfile:
-
-- open http://localhost:30880/job/widgetario/configure
-- scroll down to _Script Path_
-- change the path to `hackathon/solution-part-7/Jenkinsfile`
-
-Build again and confirm the latest images are deployed in the new namespace.
-
-_Add smoke test domain to hosts file:_
-
-```
-# On Windows (run as Admin)
-./scripts/add-to-hosts.ps1 widgetario.smoke 127.0.0.1
-./scripts/add-to-hosts.ps1 api.widgetario.smoke 127.0.0.1
-
-# OR on Linux/macOS
-./scripts/add-to-hosts.sh widgetario.smoke 127.0.0.1
-./scripts/add-to-hosts.sh api.widgetario.smoke 127.0.0.1
-```
-
-Check the Products API:
-
-```
-curl -k https://api.widgetario.smoke/products
-```
-
-> And test the app at http://widgetario.smoke
-
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
+---
 
